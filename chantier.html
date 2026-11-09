@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mon espace client</title><link rel="stylesheet" href="/style.css"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%8F%97%3C/text%3E%3C/svg%3E">
+  <style>
+    .tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; position: sticky; top: 0; background: var(--bg); padding: 8px 0; z-index: 2; }
+    .tabs button { padding: 9px 2px; font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    @media (max-width: 400px) { .tabs button { font-size: 12px; } }
+    .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .big { font-size: 34px; font-weight: 800; line-height: 1; }
+    .pbar { height: 12px; border-radius: 99px; background: var(--border); overflow: hidden; margin: 10px 0 6px; }
+    .pbar > div { height: 100%; background: var(--accent); }
+    .visit { border: 2px solid var(--accent); }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .chips button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+    .gal button { padding: 0; border: 0; background: none; cursor: zoom-in; position: relative; border-radius: 10px; overflow: hidden; aspect-ratio: 1; }
+    .gal img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .gal .ph { position: absolute; left: 6px; top: 6px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; border-radius: 99px; padding: 1px 7px; }
+    .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .ba figure { margin: 0; } .ba img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; cursor: zoom-in; }
+    .ba figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; font-weight: 600; }
+    .zoom { position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 9; display: grid; grid-template-rows: 1fr auto; padding: 16px; }
+    .zoom img { max-width: 100%; max-height: 100%; margin: auto; border-radius: 10px; object-fit: contain; min-height: 0; }
+    .zoom .bar { display: flex; gap: 8px; align-items: center; color: #fff; }
+    .zoom .bar button { background: rgba(255,255,255,.15); color: #fff; border: 0; font-size: 18px; padding: 8px 14px; }
+    .money { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: center; }
+    .money b { display: block; font-size: 18px; }
+    .thread { display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; padding: 4px 0; }
+    .bub { max-width: 82%; padding: 9px 12px; border-radius: 14px; white-space: pre-wrap; }
+    .bub small { display: block; font-size: 11px; opacity: .75; margin-bottom: 2px; }
+    .bub.client { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+    .bub.ia, .bub.artisan { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .bub.artisan { border-color: var(--ok); }
+  </style>
+</head>
+<body>
+  <div class="public" id="app">Chargement…</div>
+  <script>
+    const id = location.pathname.split("/").pop();
+    const app = document.getElementById("app");
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const eur = (n) => Number(n || 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+    const fd = (s) => new Date(s).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+    const fdt = (s) => new Date(s).toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+    const post = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+    const TABS = [["chantier", "🏗️ Chantier"], ["photos", "📷 Photos"], ["factures", "💶 Factures"], ["messages", "💬 Messages"]];
+    let P = null, tab = TABS.some(([k]) => k === location.hash.slice(1)) ? location.hash.slice(1) : "chantier", filter = "toutes", poll = null;
+
+    async function load() {
+      const r = await fetch(`/api/public/projects/${id}`);
+      if (!r.ok) return (app.textContent = "Cet espace est introuvable.");
+      P = await r.json();
+      document.title = `${P.title} · ${P.business.name}`;
+      render();
+    }
+
+    function render() {
+      app.innerHTML = `
+        <p class="muted" style="margin:0">${esc(P.business.name)} · ${esc(P.business.phone)}</p>
+        <h1>${esc(P.title)}</h1>
+        <p class="sub" style="margin-bottom:6px">Bonjour ${esc((P.client || "").split(" ")[0])}, voici votre espace client.</p>
+        <div class="tabs" role="tablist">${TABS.map(([k, l]) => `<button role="tab" aria-selected="${k === tab}" data-tab="${k}">${l}${k === "factures" && P.money.remaining > 0 && P.invoices.some((i) => i.remaining > 0) ? " •" : ""}</button>`).join("")}</div>
+        <div id="pane">${({ chantier, photos, factures, messages })[tab]()}</div>`;
+      app.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { tab = b.dataset.tab; history.replaceState(null, "", "#" + tab); render(); }));
+      wire();
+    }
+
+    function chantier() {
+      const v = P.nextVisit;
+      return `
+        <div class="card">
+          <div class="row"><span class="big">${P.progress} %</span><span class="spacer"></span><span class="badge ${P.status === "terminé" ? "ok" : "warn"}">${esc(P.status)}</span></div>
+          <div class="pbar"><div style="width:${P.progress}%"></div></div>
+          <p class="muted" style="margin:0">${P.endDate ? `Fin prévue le <b style="color:var(--text)">${fd(P.endDate)}</b>` : "Date de fin à confirmer"} · responsable : ${esc(P.staff)}</p>
+          ${P.nextStep ? `<p style="margin-bottom:0">Prochaine étape : <b>${esc(P.nextStep)}</b></p>` : ""}
+        </div>
+        ${v ? `<div class="card visit">
+          <h2>Prochain passage</h2>
+          <p style="margin:0 0 10px"><b>${cap(fdt(v.start))}</b><br>${esc(v.label)} · ${esc(v.staff)}</p>
+          ${v.answer === "présent" ? `<p class="badge ok" style="font-size:14px">✓ Vous avez confirmé votre présence</p> <button class="small" data-visit="0">Finalement, je ne pourrai pas</button>`
+            : v.answer === "absent" ? `<p class="badge bad" style="font-size:14px">Vous avez indiqué ne pas être là : nous vous rappelons.</p> <button class="small" data-visit="1">Finalement, je serai là</button>`
+            : `<div class="row"><button class="primary" data-visit="1" style="flex:1;padding:12px">✅ Je serai là</button><button data-visit="0" style="padding:12px">Je ne pourrai pas</button></div>`}
+        </div>` : ""}
+        <div class="card"><h2>Étapes</h2>
+          <ol style="padding-left:20px;margin:0">${P.steps.map((s) => `<li style="margin:6px 0;${s.done ? "" : "color:var(--muted)"}">${s.done ? "✅" : "⬜"} ${esc(s.label)}${s.doneAt ? ` <span class="muted" style="font-size:12px">(${fd(s.doneAt)})</span>` : ""}</li>`).join("")}</ol>
+        </div>
+        <div class="card"><h2>Nouvelles du chantier</h2>
+          ${P.journal.slice().reverse().filter((j) => j.text).map((j) => `<div style="border-top:1px solid var(--border);padding:8px 0"><div class="muted" style="font-size:12px">${fd(j.at)} · ${esc(j.author)}</div>${esc(j.text)}</div>`).join("") || '<p class="muted">Pas encore de nouvelles.</p>'}
+        </div>`;
+    }
+
+    function photos() {
+      const all = P.photos.slice().reverse();
+      if (!all.length) return `<div class="card muted">Pas encore de photos. Vous recevrez un SMS dès que l'équipe en ajoute.</div>`;
+      const before = P.photos.find((p) => p.phase === "avant"), now = all[0];
+      const count = (ph) => all.filter((p) => ph === "toutes" || p.phase === ph).length;
+      const shown = all.filter((p) => filter === "toutes" || p.phase === filter);
+      return `
+        ${before && now && before.id !== now.id ? `<div class="card"><h2>Avant / maintenant</h2><div class="ba">
+          <figure><img src="${before.src}" alt="Avant" data-zoom="${before.id}"><figcaption>Avant · ${fd(before.at)}</figcaption></figure>
+          <figure><img src="${now.src}" alt="Maintenant" data-zoom="${now.id}"><figcaption>Maintenant · ${fd(now.at)}</figcaption></figure></div></div>` : ""}
+        <div class="card"><h2>Toutes les photos</h2>
+          <div class="chips">${["toutes", "avant", "pendant", "après"].map((ph) => `<button class="small" data-filter="${ph}" aria-pressed="${ph === filter}">${ph[0].toUpperCase() + ph.slice(1)} (${count(ph)})</button>`).join("")}</div>
+          <div class="gal">${shown.map((p) => `<button data-zoom="${p.id}"><img src="${p.src}" alt="${esc(p.text || "Photo du chantier")}"><span class="ph">${esc(p.phase)}</span></button>`).join("") || '<p class="muted">Aucune photo dans cette catégorie.</p>'}</div>
+        </div>`;
+    }
+
+    function factures() {
+      const m = P.money, pct = m.total ? Math.round((m.paid / m.total) * 100) : 0;
+      return `
+        <div class="card">
+          <div class="money"><div><span class="muted">Total</span><b>${eur(m.total)}</b></div><div><span class="muted">Déjà réglé</span><b style="color:var(--ok)">${eur(m.paid)}</b></div><div><span class="muted">Reste</span><b>${eur(m.remaining)}</b></div></div>
+          <div class="pbar"><div style="width:${pct}%;background:var(--ok)"></div></div>
+        </div>
+        ${P.quote ? `<div class="card"><div class="row"><h2 style="margin:0">${esc(P.docLabel)} ${esc(P.quote.number)}</h2><span class="spacer"></span><span class="badge ${P.quote.status === "signé" ? "ok" : "warn"}">${P.quote.status === "signé" ? "✓ signé" : esc(P.quote.status)}</span></div>
+          <p class="muted" style="margin:6px 0">${esc(P.quote.title)} · ${eur(P.quote.totals.ttc)} TTC${P.quote.signedAt ? ` · signé le ${fd(P.quote.signedAt)}` : ""}</p>
+          <div class="row"><a href="${P.quote.link}"><button class="small">Voir</button></a><a href="/api/quotes/${P.quote.id}/pdf" target="_blank"><button class="small">PDF</button></a></div></div>` : ""}
+        <div class="card"><h2>Factures</h2>
+          ${P.invoices.map((i) => `<div style="border-top:1px solid var(--border);padding:10px 0" class="row">
+            <div style="flex:1;min-width:160px"><b>${esc(i.kind)}</b> · ${esc(i.number)}<br><span class="muted" style="font-size:12px">${eur(i.ttc)} TTC${i.remaining > 0 ? ` · échéance ${fd(i.dueDate)}` : ""}</span></div>
+            ${i.remaining > 0 ? `<a href="/f/${i.id}"><button class="primary">💳 Payer ${eur(i.remaining)}</button></a>` : `<span class="badge ok">✓ payée</span>`}
+            <a href="/api/invoices/${i.id}/pdf" target="_blank"><button class="small">PDF</button></a></div>`).join("") || '<p class="muted">Aucune facture pour l\'instant.</p>'}
+        </div>`;
+    }
+
+    function messages() {
+      const who = { client: "Vous", ia: "Prava · assistant de " + P.business.name, artisan: P.business.name };
+      return `
+        <div class="card">
+          <div class="thread" id="thread">${P.messages.map((m) => `<div class="bub ${m.from}"><small>${esc(m.from === "artisan" ? m.author || who.artisan : who[m.from])}</small>${esc(m.text)}</div>`).join("") || '<p class="muted">Posez votre question ici : réponse immédiate.</p>'}</div>
+          <div class="composer"><textarea id="q" rows="1" placeholder="Votre question…"></textarea><button class="primary" id="send">Envoyer</button></div>
+          <p class="muted" style="font-size:12px;margin-bottom:0">${P.aiPaused ? `${esc(P.business.name)} vous répond directement.` : `L'assistant répond tout de suite. L'équipe de ${esc(P.business.name)} peut prendre le relais à tout moment.`}</p>
+        </div>`;
+    }
+
+    function wire() {
+      clearInterval(poll);
+      app.querySelectorAll("[data-visit]").forEach((b) => (b.onclick = async () => { await post(`/api/public/projects/${id}/visits/${P.nextVisit.id}`, { present: b.dataset.visit === "1" }); load(); }));
+      app.querySelectorAll("[data-filter]").forEach((b) => (b.onclick = () => { filter = b.dataset.filter; render(); }));
+      app.querySelectorAll("[data-zoom]").forEach((b) => (b.onclick = () => zoom(b.dataset.zoom)));
+      const t = document.getElementById("thread");
+      if (t) {
+        t.scrollTop = t.scrollHeight;
+        const q = document.getElementById("q");
+        const send = async () => {
+          const text = q.value.trim(); if (!text) return;
+          q.value = ""; document.getElementById("send").disabled = true;
+          t.insertAdjacentHTML("beforeend", `<div class="bub client"><small>Vous</small>${esc(text)}</div><div class="muted" id="typing">…</div>`); t.scrollTop = t.scrollHeight;
+          await post(`/api/public/projects/${id}/messages`, { text });
+          await load();
+        };
+        document.getElementById("send").onclick = send;
+        q.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
+        poll = setInterval(async () => { if (document.activeElement === q && q.value) return; const n = P.messages.length; const r = await fetch(`/api/public/projects/${id}`); if (r.ok) { const d = await r.json(); if (d.messages.length !== n) { P = d; render(); } } }, 8000);
+      }
+    }
+
+    function zoom(photoId) {
+      const list = P.photos.slice().reverse();
+      let i = Math.max(0, list.findIndex((p) => p.id === photoId));
+      const z = document.createElement("div");
+      z.className = "zoom";
+      const show = () => { const p = list[i]; z.innerHTML = `<img src="${p.src}" alt="${esc(p.text || "Photo")}"><div class="bar"><button data-z="-1" aria-label="Précédente">‹</button><div style="flex:1;text-align:center;font-size:14px">${esc(p.phase)} · ${fd(p.at)}${p.text ? `<br>${esc(p.text)}` : ""}</div><button data-z="1" aria-label="Suivante">›</button><button data-z="0" aria-label="Fermer">✕</button></div>`; };
+      z.onclick = (e) => {
+        const d = e.target.dataset.z;
+        if (d === "1" || d === "-1") { i = (i + Number(d) + list.length) % list.length; show(); }
+        else if (d === "0" || e.target === z) z.remove();
+      };
+      show();
+      document.body.append(z);
+    }
+
+    window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (P && TABS.some(([k]) => k === h) && h !== tab) { tab = h; render(); } });
+    load();
+  </script>
+</body>
+</html>

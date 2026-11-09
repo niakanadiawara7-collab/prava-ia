@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Votre facture</title><link rel="stylesheet" href="/style.css"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%92%B3%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="public" id="app">Chargement…</div>
+  <script>
+    // Paiement d'une facture : carte via Stripe si configuré, sinon virement (IBAN de l'entreprise). Paiement simulé seulement sur un compte de démo.
+    const id = location.pathname.split("/").pop();
+    const app = document.getElementById("app");
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const eur = (n) => Number(n || 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+    const fd = (s) => new Date(s).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+    async function load() {
+      const r = await fetch(`/api/public/invoices/${id}`);
+      if (!r.ok) return (app.textContent = "Cette facture est introuvable.");
+      const { invoice: i, client, business: b, projectId, stripe, demo } = await r.json();
+      const paid = i.remaining <= 0;
+      app.innerHTML = `
+        <h1>${esc(b.name)}</h1><p class="sub">${esc(b.address)} · ${esc(b.phone)}</p>
+        <div class="card">
+          <div class="row"><h2 style="margin:0">Facture ${esc(i.number)}</h2><span class="badge">${esc(i.kindLabel)}</span><span class="spacer"></span><a href="/api/invoices/${i.id}/pdf" target="_blank"><button>PDF</button></a></div>
+          <p>Pour : <b>${esc(client.name)}</b><br>Objet : ${esc(i.title)}<br><span class="muted">Échéance : ${fd(i.dueDate)}</span></p>
+          <div class="table-wrap"><table>
+            ${i.lines.map((l) => `<tr><td>${esc(l.label)}</td><td class="num">${eur(l.qty * l.unitPrice)}</td></tr>`).join("")}
+            <tr><td class="num">Total HT</td><td class="num">${eur(i.totals.ht)}</td></tr>
+            <tr><td class="num">TVA ${i.tva} %</td><td class="num">${eur(i.totals.tva)}</td></tr>
+            <tr><td class="num"><b>Total TTC</b></td><td class="num"><b>${eur(i.totals.ttc)}</b></td></tr>
+            ${i.paid ? `<tr><td class="num">Déjà réglé</td><td class="num">${eur(i.paid)}</td></tr>` : ""}
+          </table></div>
+        </div>
+        <div class="card" id="payBox">${paid
+          ? `<p style="font-size:18px;margin:0"><span class="badge ok" style="font-size:15px">✓ Payée</span> Merci, cette facture est réglée.</p>`
+          : `<p style="margin-top:0">Reste à payer : <b style="font-size:22px">${eur(i.remaining)}</b></p>
+             ${stripe || demo ? `<button class="primary" id="pay" style="width:100%;padding:14px;font-size:17px">💳 Payer ${eur(i.remaining)} par carte</button>
+             <div id="card" class="hidden">
+               <label for="cn">Numéro de carte</label><input id="cn" inputmode="numeric" value="4242 4242 4242 4242">
+               <div class="row"><div style="flex:1"><label for="ce">Expiration</label><input id="ce" value="12/28"></div><div style="flex:1"><label for="cc">Code</label><input id="cc" inputmode="numeric" value="123"></div></div>
+               <p><button class="primary" id="confirm" style="width:100%;padding:12px">Confirmer le paiement</button></p>
+             </div>
+             <p class="muted" style="font-size:12px">${stripe ? "Paiement sécurisé par Stripe (carte, Apple Pay, Google Pay)." : "Démonstration : aucun argent n'est débité."}</p>` : ""}
+             ${b.iban ? `<h3 style="margin-bottom:4px">${stripe || demo ? "Ou par virement" : "Régler par virement"}</h3>
+             <p style="margin:0">Bénéficiaire : <b>${esc(b.name)}</b><br>IBAN : <b style="user-select:all">${esc(b.iban)}</b>${b.bic ? `<br>BIC : <b>${esc(b.bic)}</b>` : ""}<br>Référence à indiquer : <b>${esc(i.number)}</b></p>` : ""}
+             ${!stripe && !demo && !b.iban ? `<p>Pour régler cette facture, contactez ${esc(b.name)}${b.phone ? ` au <a href="tel:${esc(b.phone)}">${esc(b.phone)}</a>` : ""}.</p>` : ""}`}
+        </div>
+        ${projectId ? `<p><a href="/chantier/${projectId}">← Retour à mon espace client</a></p>` : ""}`;
+      document.getElementById("pay")?.addEventListener("click", async (e) => {
+        if (stripe) {
+          e.target.disabled = true; e.target.textContent = "Ouverture du paiement sécurisé…";
+          const s = await (await fetch(`/api/public/invoices/${id}/checkout`, { method: "POST" })).json();
+          if (s.url) return (location.href = s.url);
+          e.target.disabled = false; e.target.textContent = s.error || "Erreur, réessayez"; return;
+        }
+        document.getElementById("card").classList.remove("hidden"); document.getElementById("pay").classList.add("hidden");
+      });
+      document.getElementById("confirm")?.addEventListener("click", async (e) => {
+        e.target.disabled = true; e.target.textContent = "Paiement en cours…";
+        await fetch(`/api/public/invoices/${id}/pay`, { method: "POST" });
+        load();
+      });
+    }
+    // Retour de Stripe : on confirme le paiement auprès de Stripe puis on recharge
+    const sid = new URLSearchParams(location.search).get("session_id");
+    if (sid) fetch(`/api/public/invoices/${id}/stripe-confirm`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sid }) }).finally(() => { history.replaceState(null, "", location.pathname); load(); });
+    else load();
+  </script>
+</body>
+</html>

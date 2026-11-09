@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Votre devis</title><link rel="stylesheet" href="/style.css"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%9E%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="public" id="app">Chargement…</div>
+  <script>
+    // Consultation et signature du devis : aides à la rénovation, mention de TVA certifiée, signature manuscrite + code SMS
+    // (ou Yousign si la clé est configurée), puis paiement de l'acompte.
+    const id = location.pathname.split("/").pop();
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const eur = (n) => Number(n).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+    const $ = (s) => document.querySelector(s);
+    const app = $("#app");
+    const postJ = async (url, body) => { const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }); return r.json(); };
+
+    async function load() {
+      const r = await fetch(`/api/public/quotes/${id}`);
+      if (!r.ok) return (app.textContent = "Ce document est introuvable.");
+      const { quote: q, client, business: b, docLabel, acompte, aids, vatMention, yousign } = await r.json();
+      const deposit = Math.round(q.totals.ttc * b.depositPercent) / 100;
+      const a = aids && aids.category && aids.total > 0 ? aids : null;
+      app.innerHTML = `
+        <h1>${esc(b.name)}</h1><p class="sub">${esc(b.address)} · ${esc(b.phone)}</p>
+        <div class="card">
+          <div class="row"><h2>${esc(docLabel)} ${esc(q.number)}</h2><span class="spacer"></span><a href="/api/quotes/${q.id}/pdf" target="_blank"><button>Télécharger le PDF</button></a></div>
+          <p>Pour : <b>${esc(client.name)}</b><br>Objet : ${esc(q.title)}</p>
+          <div class="table-wrap"><table><tr><th>Désignation</th><th class="num">Qté</th><th class="num">PU HT</th><th class="num">Total HT</th></tr>
+          ${q.lines.map((l) => `<tr><td>${esc(l.label)}</td><td class="num">${l.qty} ${esc(l.unit)}</td><td class="num">${eur(l.unitPrice)}</td><td class="num">${eur(l.qty * l.unitPrice)}</td></tr>`).join("")}
+          <tr><td colspan="3" class="num">Total HT</td><td class="num">${eur(q.totals.ht)}</td></tr>
+          <tr><td colspan="3" class="num">TVA ${q.tva} %</td><td class="num">${eur(q.totals.tva)}</td></tr>
+          <tr><td colspan="3" class="num"><b>Total TTC</b></td><td class="num"><b>${eur(q.totals.ttc)}</b></td></tr></table></div>
+          ${q.notes ? `<p class="muted">${esc(q.notes)}</p>` : ""}
+        </div>
+        ${a ? `<div class="card aidbox"><h2 style="color:var(--ok)">🏠 Vos aides pour ces travaux</h2>
+          <p class="muted" style="margin-top:-4px">Profil ${esc(a.categoryLabel)}</p>
+          <table>${a.items.map((it) => `<tr><td>${esc(it.label)}</td><td class="num">MaPrimeRénov' ${eur(it.mpr)}</td><td class="num">Prime CEE ${eur(it.cee)}</td></tr>`).join("")}
+            <tr><td><b>Total des aides</b></td><td colspan="2" class="num"><b>${eur(a.total)}</b></td></tr></table>
+          <p style="font-size:20px;margin:10px 0 4px">Reste à votre charge : <b style="color:var(--ok)">${eur(a.resteACharge)}</b> <span class="muted" style="font-size:13px">au lieu de ${eur(a.ttc)}</span></p>
+          <p class="muted" style="font-size:12px;margin:0">${a.rgeNumero ? `Entreprise certifiée RGE (${esc(a.rgeNumero)}). ` : ""}Montants indicatifs. Important : déposez votre demande MaPrimeRénov' sur maprimerenov.gouv.fr avant de signer, nous pouvons vous aider.</p></div>` : ""}
+        <div class="card" id="signBox">${q.status === "signé"
+          ? `<p class="badge ok" style="font-size:14px">✓ Signé par ${esc(q.signedBy || "")} le ${new Date(q.signedAt || Date.now()).toLocaleDateString("fr-FR")}</p>
+             ${q.signature?.image ? `<p><img src="${q.signature.image}" alt="Signature" style="max-height:70px;background:#fff;border-radius:6px"></p><p class="muted" style="font-size:12px">${esc(q.signature.method)}. Empreinte du document : ${esc((q.signature.fingerprint || "").slice(0, 16))}…</p>` : ""}
+             ${q.depositPaid ? `<p class="badge ok">✓ Acompte de ${eur(q.depositPaid)} reçu, merci !</p>` : acompte ? `<p>Votre facture d'acompte (${b.depositPercent} %) est prête.</p><a href="/f/${acompte.id}"><button class="primary">💳 Régler l'acompte</button></a>` : `<p>Acompte de ${b.depositPercent} % : <b>${eur(deposit)}</b></p><button class="primary" id="pay">Régler l'acompte</button>`}`
+          : `<h2>Bon pour accord</h2>
+             <div class="steps"><span class="on" id="st1">1. Vos informations</span> › <span id="st2">2. Signature</span> › <span id="st3">3. Code de confirmation</span></div>
+             <label for="name">Votre nom et prénom</label><input id="name" value="${esc(client.name)}">
+             <label style="display:flex;gap:8px;align-items:flex-start;color:var(--text);font-size:13px"><input type="checkbox" id="ok" style="width:auto;margin-top:3px"> J'accepte ce ${esc(docLabel.toLowerCase())} et ses conditions.</label>
+             ${vatMention ? `<label style="display:flex;gap:8px;align-items:flex-start;color:var(--text);font-size:13px"><input type="checkbox" id="vat" style="width:auto;margin-top:3px"> <span><b>TVA à ${String(q.tva).replace(".", ",")} %</b> : ${esc(vatMention)}</span></label>` : ""}
+             ${yousign ? `<p><button class="primary" id="ys" style="width:100%;padding:12px">Signer avec Yousign</button></p><p class="muted" style="font-size:12px">Signature électronique sécurisée Yousign, avec un code reçu par SMS.</p>`
+               : `<label>Signez dans le cadre (doigt ou souris)</label><canvas id="pad" class="sigpad"></canvas><p style="margin:4px 0"><button class="small" id="clear">Effacer</button></p>
+                  <p><button class="primary" id="code" style="width:100%;padding:12px">Recevoir mon code de signature</button></p>
+                  <div id="codeBox" class="hidden"><label for="otp" id="otpLbl">Code reçu</label><input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" style="font-size:22px;letter-spacing:6px;text-align:center"><p id="demo" class="muted" style="font-size:12px"></p>
+                  <p><button class="primary" id="sign" style="width:100%;padding:12px">✍️ Signer électroniquement</button></p></div>
+                  <p class="muted" style="font-size:12px">Signature électronique : le code reçu, votre signature, la date et l'empreinte du document sont conservés dans un dossier de preuve.</p>`}
+             <p id="err" style="color:var(--bad)"></p>`}
+        </div>`;
+      if (q.status === "signé") { $("#pay")?.addEventListener("click", async () => { const r = await postJ(`/api/public/quotes/${id}/deposit`); if (r.invoiceId) location.href = `/f/${r.invoiceId}`; else load(); }); return; }
+      const check = () => {
+        if (!$("#ok").checked) { $("#err").textContent = "Merci de cocher la case d'acceptation."; return false; }
+        if ($("#vat") && !$("#vat").checked) { $("#err").textContent = "Merci de certifier la mention de TVA à taux réduit."; return false; }
+        $("#err").textContent = ""; return true;
+      };
+      $("#ys")?.addEventListener("click", async () => { if (!check()) return; const r = await postJ(`/api/public/quotes/${id}/yousign`); if (r.url) location.href = r.url; else $("#err").textContent = r.error || "Erreur"; });
+      const pad = $("#pad");
+      if (!pad) return;
+      // Pavé de signature
+      const ctx = pad.getContext("2d");
+      const fit = () => { const r = pad.getBoundingClientRect(); pad.width = r.width * devicePixelRatio; pad.height = r.height * devicePixelRatio; ctx.scale(devicePixelRatio, devicePixelRatio); ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.strokeStyle = "#111"; };
+      fit();
+      let drawing = false, drawn = false, last = null;
+      const pos = (e) => { const r = pad.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+      pad.onpointerdown = (e) => { drawing = true; last = pos(e); pad.setPointerCapture(e.pointerId); $("#st2").classList.add("on"); };
+      pad.onpointermove = (e) => { if (!drawing) return; const p = pos(e); ctx.beginPath(); ctx.moveTo(...last); ctx.lineTo(...p); ctx.stroke(); last = p; drawn = true; };
+      pad.onpointerup = pad.onpointercancel = () => (drawing = false);
+      $("#clear").onclick = () => { ctx.clearRect(0, 0, pad.width, pad.height); drawn = false; };
+      $("#code").onclick = async () => {
+        if (!check()) return;
+        if (!drawn) return ($("#err").textContent = "Merci de signer dans le cadre.");
+        $("#code").disabled = true;
+        const r = await postJ(`/api/public/quotes/${id}/otp`);
+        if (r.error) { $("#err").textContent = r.error; $("#code").disabled = false; return; }
+        $("#codeBox").classList.remove("hidden"); $("#st3").classList.add("on");
+        $("#otpLbl").textContent = `Code envoyé au ${r.to}`;
+        $("#code").textContent = "Renvoyer un code"; $("#code").classList.remove("primary"); $("#code").disabled = false;
+        if (r.demoCode) $("#demo").textContent = `Démonstration : le code est ${r.demoCode}.`;
+        $("#otp").focus();
+      };
+      $("#sign").onclick = async () => {
+        if (!check()) return;
+        const out = await postJ(`/api/public/quotes/${id}/sign`, { name: $("#name").value, code: $("#otp").value, signature: pad.toDataURL("image/png"), vatCertified: Boolean($("#vat")?.checked) });
+        if (out.error) return ($("#err").textContent = out.error);
+        load();
+      };
+    }
+    load();
+  </script>
+</body>
+</html>

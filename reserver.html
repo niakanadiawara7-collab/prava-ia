@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prendre rendez-vous</title><link rel="stylesheet" href="/style.css"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%9E%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="public">
+    <h1 id="name">…</h1><p class="sub">Posez votre question, demandez un devis ou réservez un créneau. Réponse immédiate, 24 h/24.</p>
+    <div class="card"><div class="chat" style="height:70vh">
+      <div class="msgs" id="msgs"></div>
+      <div class="composer"><textarea id="input" rows="1" placeholder="Votre message…"></textarea><button class="primary" id="send">Envoyer</button></div>
+    </div></div>
+  </div>
+  <script>
+    const B = location.search.includes("b=") ? "?b=" + encodeURIComponent(new URLSearchParams(location.search).get("b")) : "";
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const msgs = document.getElementById("msgs"), input = document.getElementById("input");
+    const add = (cls, t) => { msgs.insertAdjacentHTML("beforeend", `<div class="${cls}">${esc(t)}</div>`); msgs.scrollTop = msgs.scrollHeight; };
+    let conv = null;
+    fetch("/api/public/business" + B).then((r) => r.json()).then((b) => { document.getElementById("name").textContent = b.name; add("msg ai", `Bonjour et bienvenue chez ${b.name} ! Comment puis-je vous aider ?`); });
+    async function send() {
+      const text = input.value.trim(); if (!text) return;
+      add("msg user", text); input.value = ""; add("typing", "…");
+      const r = await fetch("/api/public/chat" + B, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversationId: conv, text }) }).then((r) => r.json());
+      msgs.querySelector(".typing")?.remove();
+      conv = r.conversationId; add("msg ai", r.reply || r.error);
+    }
+    document.getElementById("send").onclick = send;
+    input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
+  </script>
+</body>
+</html>

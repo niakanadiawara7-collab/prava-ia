@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Votre rendez-vous</title><link rel="stylesheet" href="/style.css"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%9E%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="public" id="app">Chargement…</div>
+  <script>
+    const id = location.pathname.split("/").pop();
+    const app = document.getElementById("app");
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const fmt = (s) => new Date(s).toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    const send = (body) => fetch(`/api/public/appointments/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(load);
+    async function load() {
+      const r = await fetch(`/api/public/appointments/${id}`);
+      if (!r.ok) return (app.textContent = "Rendez-vous introuvable.");
+      const { appointment: a, business: b, slots } = await r.json();
+      app.innerHTML = `<h1>${esc(b.name)}</h1><p class="sub">${esc(b.phone)}</p>
+        <div class="card"><h2>${esc(a.title)}</h2><p>${fmt(a.start)} · ${a.duration} min</p>
+          <p>${a.status === "annulé" ? '<span class="badge bad">Annulé</span>' : a.clientConfirmed ? '<span class="badge ok">✓ Vous avez confirmé</span>' : '<span class="badge warn">À confirmer</span>'}</p>
+          ${a.status === "annulé" ? "" : `<div class="row"><button class="primary" id="confirm">Je confirme</button><button id="cancel">Annuler</button></div>`}</div>
+        ${a.status === "annulé" ? "" : `<div class="card"><h2>Déplacer le rendez-vous</h2>${slots.map((d) => `<p><b style="text-transform:capitalize">${esc(d.jour)}</b><br><span class="row">${d.creneaux.map((h) => `<button class="small" data-s="${d.date}T${h}">${h}</button>`).join("")}</span></p>`).join("") || "<p class='muted'>Pas d'autre créneau disponible, appelez-nous.</p>"}</div>`}`;
+      document.getElementById("confirm")?.addEventListener("click", () => send({ confirm: true }));
+      document.getElementById("cancel")?.addEventListener("click", () => confirm("Annuler ce rendez-vous ?") && send({ cancel: true }));
+      app.querySelectorAll("[data-s]").forEach((b) => b.addEventListener("click", () => send({ new_start: b.dataset.s })));
+    }
+    load();
+  </script>
+</body>
+</html>

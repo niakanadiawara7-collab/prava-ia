@@ -1,0 +1,22 @@
+# Lancement sur un serveur (Scaleway, OVH, n'importe quel VPS) : docker compose up -d
+services:
+  prava:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+  # HTTPS automatique avec Caddy : remplacez app.votre-domaine.fr dans le Caddyfile
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+volumes:
+  caddy_data:

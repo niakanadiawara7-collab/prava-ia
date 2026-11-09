@@ -1,0 +1,29 @@
+# Déploiement Render en un clic (New > Blueprint) : un service web + un disque persistant
+services:
+  - type: web
+    name: prava-ia
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    healthCheckPath: /sante
+    disk:
+      name: prava-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PUBLIC_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false

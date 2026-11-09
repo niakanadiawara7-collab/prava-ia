@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prava IA</title>
+  <link rel="stylesheet" href="/style.css"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%9E%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav">
+      <div class="brand">Prava IA</div>
+      <div class="biz" id="bizName"></div>
+      <div class="biz" id="planName" style="margin-top:-10px"></div>
+      <a href="#dashboard" data-view="dashboard">📊 Tableau de bord</a>
+      <a href="#telephone" data-view="telephone">📱 Téléphone</a>
+      <a href="#accueil" data-view="accueil">💬 Accueil IA (chat)</a>
+      <a href="#patron" data-view="patron">🎙️ Assistant patron</a>
+      <a href="#agenda" data-view="agenda">📅 Agenda</a>
+      <a href="#chantiers" data-view="chantiers" data-feature="chantiers" id="navProjects">🏗️ Chantiers</a>
+      <a href="#rentabilite" data-view="rentabilite" data-feature="chantiers">💶 Rentabilité</a>
+      <a href="#devis" data-view="devis" data-feature="devis">📄 Devis &amp; factures</a>
+      <a href="#aides" data-view="aides" data-feature="devis">🏠 Aides rénovation</a>
+      <a href="#compta" data-view="compta" data-feature="compta">🧾 Compta</a>
+      <a href="#mails" data-view="mails" data-feature="mails">✉️ Mails <span id="mailCount" class="badge warn hidden"></span></a>
+      <a href="#clients" data-view="clients">👥 Clients</a>
+      <a href="#messages" data-view="messages">💬 Messages envoyés</a>
+      <a href="#parametres" data-view="parametres">⚙️ Paramètres</a>
+      <a href="#importer" data-view="importer">📥 Importer mes données</a>
+    </nav>
+    <main id="main"></main>
+  </div>
+  <div id="drawer" class="drawer hidden"></div>
+  <script src="/app.js"></script>
+  <script src="/extras.js"></script>
+</body>
+</html>

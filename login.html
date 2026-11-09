@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prava IA · Connexion</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%9E%3C/text%3E%3C/svg%3E">
+  <style>
+    .wrap { max-width: 420px; margin: 0 auto; padding: 40px 16px; }
+    .brand { font-weight: 700; font-size: 28px; color: var(--accent); margin-bottom: 2px; }
+    .tabs { display: flex; gap: 6px; margin: 18px 0 12px; }
+    .tabs button { flex: 1; }
+    .tabs button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+    form button[type=submit] { width: 100%; padding: 11px; margin-top: 14px; }
+    .err { color: var(--bad); min-height: 1.4em; margin: 8px 0 0; }
+    .ok { color: var(--ok); }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">Prava IA</div>
+    <p class="sub">L'assistant des artisans : téléphone, devis, factures, chantiers.</p>
+    <div class="tabs" id="tabs"><button data-tab="login" class="on">Se connecter</button><button data-tab="signup">Créer un compte</button></div>
+    <div class="card">
+      <form id="login">
+        <label for="le">E-mail</label><input id="le" type="email" autocomplete="email" required>
+        <label for="lp">Mot de passe</label><input id="lp" type="password" autocomplete="current-password" required>
+        <button class="primary" type="submit">Se connecter</button>
+        <p style="margin:12px 0 0"><a href="#" id="toForgot">Mot de passe oublié ?</a></p>
+      </form>
+      <form id="signup" class="hidden">
+        <label for="sn">Nom de l'entreprise</label><input id="sn" required placeholder="ex. Dupont Plomberie">
+        <label for="so">Votre nom et prénom</label><input id="so" required autocomplete="name">
+        <label for="ss">Métier</label><select id="ss"></select>
+        <label for="sph">Téléphone</label><input id="sph" type="tel" autocomplete="tel">
+        <label for="se">E-mail</label><input id="se" type="email" autocomplete="email" required>
+        <label for="sp">Mot de passe (8 caractères minimum)</label><input id="sp" type="password" autocomplete="new-password" minlength="8" required>
+        <div id="codeBox" class="hidden"><label for="sc">Code d'invitation</label><input id="sc"></div>
+        <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="sd" style="width:auto"> Compte de démonstration (rempli avec une entreprise fictive)</label>
+        <select id="sdp" class="hidden"></select>
+        <button class="primary" type="submit">Créer mon compte</button>
+      </form>
+      <form id="forgot" class="hidden">
+        <p style="margin-top:0">Entrez votre e-mail : nous vous envoyons un lien pour choisir un nouveau mot de passe.</p>
+        <label for="fe">E-mail</label><input id="fe" type="email" required>
+        <button class="primary" type="submit">Recevoir le lien</button>
+      </form>
+      <form id="reset" class="hidden">
+        <p style="margin-top:0">Choisissez votre nouveau mot de passe.</p>
+        <label for="rp">Nouveau mot de passe (8 caractères minimum)</label><input id="rp" type="password" autocomplete="new-password" minlength="8" required>
+        <button class="primary" type="submit">Enregistrer et me connecter</button>
+      </form>
+      <p class="err" id="err"></p>
+    </div>
+  </div>
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const forms = ["login", "signup", "forgot", "reset"];
+    const show = (f) => { forms.forEach((x) => $("#" + x).classList.toggle("hidden", x !== f)); document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === f)); $("#err").textContent = ""; };
+    document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => show(b.dataset.tab)));
+    $("#toForgot").onclick = (e) => { e.preventDefault(); show("forgot"); };
+    const post = async (url, body) => { const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); return r.json(); };
+    const fail = (msg) => { $("#err").className = "err"; $("#err").textContent = msg; };
+
+    fetch("/api/auth/config").then((r) => r.json()).then((c) => {
+      $("#ss").innerHTML = c.sectors.map((s) => `<option value="${s.id}" ${s.id === "btp" ? "selected" : ""}>${s.label}</option>`).join("");
+      $("#sdp").innerHTML = (c.demos || []).map((d) => `<option value="${d.id}">${d.label}</option>`).join("");
+      $("#codeBox").classList.toggle("hidden", !c.inviteOnly);
+    });
+    $("#sd").onchange = () => $("#sdp").classList.toggle("hidden", !$("#sd").checked);
+
+    $("#login").onsubmit = async (e) => { e.preventDefault(); const r = await post("/api/auth/login", { email: $("#le").value, password: $("#lp").value }); r.ok ? (location.href = "/") : fail(r.error); };
+    $("#signup").onsubmit = async (e) => {
+      e.preventDefault();
+      const r = await post("/api/auth/signup", { name: $("#sn").value, owner: $("#so").value, sector: $("#ss").value, phone: $("#sph").value, email: $("#se").value, password: $("#sp").value, code: $("#sc").value, demo: $("#sd").checked ? $("#sdp").value : null });
+      r.ok ? (location.href = "/#parametres") : fail(r.error);
+    };
+    $("#forgot").onsubmit = async (e) => {
+      e.preventDefault();
+      const r = await post("/api/auth/forgot", { email: $("#fe").value });
+      if (r.error) return fail(r.error);
+      $("#err").className = "ok";
+      $("#err").textContent = r.mail ? "Si un compte existe avec cet e-mail, le lien vient de partir. Pensez à regarder les spams." : "L'envoi d'e-mails n'est pas configuré sur ce serveur : demandez le lien à l'administrateur (il s'affiche dans les journaux du serveur).";
+    };
+    const token = (location.hash.match(/reset=([^&]+)/) || [])[1];
+    if (token) show("reset");
+    $("#reset").onsubmit = async (e) => { e.preventDefault(); const r = await post("/api/auth/reset", { token, password: $("#rp").value }); r.ok ? (location.href = "/") : fail(r.error); };
+  </script>
+</body>
+</html>

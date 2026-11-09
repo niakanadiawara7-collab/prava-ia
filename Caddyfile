@@ -1,0 +1,3 @@
+app.votre-domaine.fr {
+  reverse_proxy prava:3000
+}
